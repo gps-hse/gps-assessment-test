@@ -1090,8 +1090,8 @@ async function verInit(p, opt) {
   if (saved && saved.ticket && saved.until > Date.now()) { verDone(p, saved); return; }
   box.innerHTML = '<p class="vt">Step 1 &middot; Confirm your email address</p>' +
     '<div id="' + p + 'GW"><div class="grow"><div class="gbtn" id="' + p + 'G"></div>' +
-    '<button class="gogo" id="' + p + 'Go" title="Continue with this Google account" aria-label="Continue">&#10140;</button><span class="gspin hidden" id="' + p + 'Gs"></span></div>' +
-    '<div class="gcap" id="' + p + 'Gc">Sign in using your Google account</div></div>' +
+    '<span class="gspin hidden" id="' + p + 'Gs"></span></div>' +
+    '<div class="gcap" id="' + p + 'Gc">Sign in using your Google account by clicking above and selecting the account</div></div>' +
     '<div class="or" id="' + p + 'Or">or get a code by email</div>' +
     '<label for="' + p + 'Em">Email address</label><div class="row"><div><input type="text" id="' + p + 'Em" inputmode="email" autocomplete="email"></div><button class="secondary" id="' + p + 'Send">Send code</button></div>' +
     '<div id="' + p + 'S2" class="hidden"><p class="note" id="' + p + 'Sent" style="margin:8px 0 0"></p><label for="' + p + 'Cd">6-digit code from the email</label>' +
@@ -1102,31 +1102,24 @@ async function verInit(p, opt) {
   if (opt.clientId !== undefined) GSI.cid = opt.clientId;
   if (GSI.cid === undefined) { try { GSI.cid = (await api('authInfo', {}, 2)).googleClientId || ''; } catch (e) { GSI.cid = ''; } }
   if (!GSI.cid) { $(p + 'GW').remove(); $(p + 'Or').remove(); return; }
-  // The arrow cannot press Google's own button (it sits inside Google's frame), so it opens Google's "Continue as…" confirmation instead.
-  $(p + 'Go').onclick = () => {
-    verErr(p, '');
-    try { google.accounts.id.prompt(); } catch (e) { /* ignore */ }
-    clearTimeout(S['gHint' + p]);
-    S['gHint' + p] = setTimeout(() => { if (!VER[p] && !S['gBusy' + p]) $(p + 'Gc').textContent = 'If nothing opened, tap the Google button on the left.'; }, 2500);
-  };
   try {
     await verLoadGsi(GSI.cid);
     GSI.target = p;
-    google.accounts.id.renderButton($(p + 'G'), { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: Math.max(200, Math.min(300, box.clientWidth - 90)) });
+    google.accounts.id.renderButton($(p + 'G'), { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: Math.max(200, Math.min(300, box.clientWidth - 80)) });   // leaves room for the spinner beside it
     try { google.accounts.id.prompt(); } catch (e) { /* the "Continue as…" pop-up is not available in this browser */ }
-  } catch (e) { $(p + 'G').innerHTML = '<span class="note">Google sign-in could not load here - use the email code below.</span>'; $(p + 'Go').classList.add('hidden'); }
+  } catch (e) { $(p + 'G').innerHTML = '<span class="note">Google sign-in could not load here - use the email code below.</span>'; $(p + 'Gc').classList.add('hidden'); }
 }
 function verErr(p, m) { const e = $(p + 'VErr'); if (e) e.textContent = m || ''; }
 async function verGoogle(p, credential) {
   verErr(p, '');
   // Show that the email was found and is being confirmed (the server check can take a few seconds)
-  S['gBusy' + p] = true; clearTimeout(S['gHint' + p]);
-  const go = $(p + 'Go'), sp = $(p + 'Gs'), cap = $(p + 'Gc');
-  if (go) go.classList.add('hidden'); if (sp) sp.classList.remove('hidden'); if (cap) cap.textContent = 'Email found - confirming, please wait…';
+  S['gBusy' + p] = true;
+  const sp = $(p + 'Gs'), cap = $(p + 'Gc');
+  if (sp) sp.classList.remove('hidden'); if (cap) cap.textContent = 'Email found - confirming, please wait…';
   try { verDone(p, await api('googleSignIn', { credential: credential }, 1)); }
   catch (e) {
     verErr(p, e.message);
-    if (go) go.classList.remove('hidden'); if (sp) sp.classList.add('hidden'); if (cap) cap.textContent = 'Sign in using your Google account';
+    if (sp) sp.classList.add('hidden'); if (cap) cap.textContent = 'Sign in using your Google account by clicking above and selecting the account';
   }
   S['gBusy' + p] = false;
 }
