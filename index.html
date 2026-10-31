@@ -64,7 +64,11 @@ html.deep #sLogin{display:none!important}html.deep #sLoading{display:block!impor
 .verbox{border:1px solid var(--line);border-radius:10px;padding:14px;margin:14px 0 4px;background:#FFFCFA}
 .verbox .vt{font-weight:600;font-size:14px;margin:0 0 10px}
 .verbox .gbtn{display:flex;justify-content:center;min-height:44px}
-.verbox .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:12px 0 4px}
+.verbox .grow{display:flex;align-items:center;justify-content:center;gap:10px}
+.verbox .gogo{flex:0 0 46px;width:46px;height:46px;margin:0;padding:0;border-radius:50%;background:#3E8E6A;color:#fff;font-size:22px;line-height:46px;box-shadow:0 2px 6px rgba(62,142,106,.35)}
+.verbox .gspin{flex:0 0 30px;width:30px;height:30px;box-sizing:border-box;border:3px solid #EADBD3;border-top-color:#3E8E6A;border-radius:50%;animation:spin 1s linear infinite;margin:8px}
+.verbox .gcap{text-align:center;font-size:12px;color:var(--muted);margin-top:6px}
+.verbox .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:24px 0 8px}
 .verbox .or:before,.verbox .or:after{content:"";flex:1;border-top:1px solid var(--line)}
 .verbox .row{display:flex;gap:8px;align-items:flex-end}.verbox .row>div{flex:1}.verbox .row button{width:auto;margin-top:0;padding:12px 14px;white-space:nowrap}
 .verok{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:4px 10px;background:#EAF5EF;color:#2F6E52;border-radius:8px;padding:10px 12px;font-size:14px}
@@ -318,6 +322,7 @@ var TIPS = (function () {
   }
   return out;
 })();
+var TIP_SECONDS = 6;   // how long each loading tip stays on screen (seconds) - change this number to slow down or speed up the tips
 var TIP_I = Math.floor(Math.random() * TIPS.length);
 function tipNext(now) {
   const t = TIPS[TIP_I];
@@ -332,7 +337,7 @@ function tipNext(now) {
 }
 tipNext(true);   // the script runs at the end of the page, so the tip boxes already exist
 document.addEventListener('DOMContentLoaded', () => { try { S.hatHtml = document.getElementById('doneIcon').innerHTML; } catch (e) {} });
-setInterval(tipNext, 3500);
+setInterval(tipNext, TIP_SECONDS * 1000);
 /* ===== Settings ===== */
 const ENDPOINT = 'https://script.google.com/macros/s/AKfycbxvddSzFabiMR-6gfXsxmkGDWsbXwxRPuXnFJKFwYLuNt1YKgY3OoLDLfOz4i20o1Jmbw/exec';
 
@@ -1083,7 +1088,11 @@ async function verInit(p, opt) {
   try { saved = JSON.parse(sessionStorage.getItem('gpsVer') || 'null'); } catch (e) { saved = null; }
   if (opt.ticket) saved = opt;
   if (saved && saved.ticket && saved.until > Date.now()) { verDone(p, saved); return; }
-  box.innerHTML = '<p class="vt">Step 1 &middot; Confirm your email address</p><div class="gbtn" id="' + p + 'G"></div><div class="or" id="' + p + 'Or">or get a code by email</div>' +
+  box.innerHTML = '<p class="vt">Step 1 &middot; Confirm your email address</p>' +
+    '<div id="' + p + 'GW"><div class="grow"><div class="gbtn" id="' + p + 'G"></div>' +
+    '<button class="gogo" id="' + p + 'Go" title="Continue with this Google account" aria-label="Continue">&#10140;</button><span class="gspin hidden" id="' + p + 'Gs"></span></div>' +
+    '<div class="gcap" id="' + p + 'Gc">Sign in using your Google account</div></div>' +
+    '<div class="or" id="' + p + 'Or">or get a code by email</div>' +
     '<label for="' + p + 'Em">Email address</label><div class="row"><div><input type="text" id="' + p + 'Em" inputmode="email" autocomplete="email"></div><button class="secondary" id="' + p + 'Send">Send code</button></div>' +
     '<div id="' + p + 'S2" class="hidden"><p class="note" id="' + p + 'Sent" style="margin:8px 0 0"></p><label for="' + p + 'Cd">6-digit code from the email</label>' +
     '<div class="row"><div><input type="text" id="' + p + 'Cd" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="letter-spacing:4px;font-weight:700"></div><button id="' + p + 'Chk">Confirm</button></div></div>' +
@@ -1092,18 +1101,34 @@ async function verInit(p, opt) {
   $(p + 'Chk').onclick = () => verCheck(p);
   if (opt.clientId !== undefined) GSI.cid = opt.clientId;
   if (GSI.cid === undefined) { try { GSI.cid = (await api('authInfo', {}, 2)).googleClientId || ''; } catch (e) { GSI.cid = ''; } }
-  if (!GSI.cid) { $(p + 'G').remove(); $(p + 'Or').remove(); return; }
+  if (!GSI.cid) { $(p + 'GW').remove(); $(p + 'Or').remove(); return; }
+  // The arrow cannot press Google's own button (it sits inside Google's frame), so it opens Google's "Continue as…" confirmation instead.
+  $(p + 'Go').onclick = () => {
+    verErr(p, '');
+    try { google.accounts.id.prompt(); } catch (e) { /* ignore */ }
+    clearTimeout(S['gHint' + p]);
+    S['gHint' + p] = setTimeout(() => { if (!VER[p] && !S['gBusy' + p]) $(p + 'Gc').textContent = 'If nothing opened, tap the Google button on the left.'; }, 2500);
+  };
   try {
     await verLoadGsi(GSI.cid);
     GSI.target = p;
-    google.accounts.id.renderButton($(p + 'G'), { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: Math.max(220, Math.min(320, box.clientWidth - 30)) });
+    google.accounts.id.renderButton($(p + 'G'), { theme: 'outline', size: 'large', text: 'continue_with', shape: 'pill', width: Math.max(200, Math.min(300, box.clientWidth - 90)) });
     try { google.accounts.id.prompt(); } catch (e) { /* the "Continue as…" pop-up is not available in this browser */ }
-  } catch (e) { $(p + 'G').innerHTML = '<span class="note">Google sign-in could not load here - use the email code below.</span>'; }
+  } catch (e) { $(p + 'G').innerHTML = '<span class="note">Google sign-in could not load here - use the email code below.</span>'; $(p + 'Go').classList.add('hidden'); }
 }
 function verErr(p, m) { const e = $(p + 'VErr'); if (e) e.textContent = m || ''; }
 async function verGoogle(p, credential) {
   verErr(p, '');
-  try { verDone(p, await api('googleSignIn', { credential: credential }, 1)); } catch (e) { verErr(p, e.message); }
+  // Show that the email was found and is being confirmed (the server check can take a few seconds)
+  S['gBusy' + p] = true; clearTimeout(S['gHint' + p]);
+  const go = $(p + 'Go'), sp = $(p + 'Gs'), cap = $(p + 'Gc');
+  if (go) go.classList.add('hidden'); if (sp) sp.classList.remove('hidden'); if (cap) cap.textContent = 'Email found - confirming, please wait…';
+  try { verDone(p, await api('googleSignIn', { credential: credential }, 1)); }
+  catch (e) {
+    verErr(p, e.message);
+    if (go) go.classList.remove('hidden'); if (sp) sp.classList.add('hidden'); if (cap) cap.textContent = 'Sign in using your Google account';
+  }
+  S['gBusy' + p] = false;
 }
 async function verSend(p) {
   verErr(p, '');
